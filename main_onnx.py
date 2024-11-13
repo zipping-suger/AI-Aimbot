@@ -4,11 +4,10 @@ import gc
 import numpy as np
 import cv2
 import time
-import win32api
-import win32con
 import pandas as pd
 from utils.general import (cv2, non_max_suppression, xyxy2xywh)
 import torch
+from pynput import keyboard, mouse
 
 # Could be do with
 # from config import *
@@ -18,7 +17,11 @@ import gameSelection
 
 def main():
     # External Function for running the game selection menu (gameSelection.py)
-    camera, cWidth, cHeight = gameSelection.gameSelection()
+    result = gameSelection.gameSelection()
+    if result is None:
+        print("Failed to select and activate game window.")
+        return
+    sct, region, cWidth, cHeight = result
 
     # Used for forcing garbage collection
     count = 0
@@ -44,10 +47,15 @@ def main():
 
     # Main loop Quit if Q is pressed
     last_mid_coord = None
-    while win32api.GetAsyncKeyState(ord(aaQuitKey)) == 0:
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+    mouse_controller = mouse.Controller()
+
+    while not quit_program:
 
         # Getting Frame
-        npImg = np.array(camera.get_latest_frame())
+        screenshot = sct.grab(region)
+        npImg = np.array(screenshot)
 
         from config import maskSide # "temporary" workaround for bad syntax
         if useMask:
@@ -144,9 +152,8 @@ def main():
             mouseMove = [xMid - cWidth, (yMid - headshot_offset) - cHeight]
 
             # Moving the mouse
-            if win32api.GetKeyState(0x14):
-                win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, int(
-                    mouseMove[0] * aaMovementAmp), int(mouseMove[1] * aaMovementAmp), 0, 0)
+            if caps_lock_on():
+                mouse_controller.move(int(mouseMove[0] * aaMovementAmp), int(mouseMove[1] * aaMovementAmp))
             last_mid_coord = [xMid, yMid]
 
         else:
@@ -192,6 +199,19 @@ def main():
                 exit()
     camera.stop()
 
+quit_program = False
+
+def on_press(key):
+    global quit_program
+    try:
+        if key.char == aaQuitKey:
+            quit_program = True
+    except AttributeError:
+        pass
+
+def caps_lock_on():
+    with open('/sys/class/leds/input0::capslock/brightness') as f:
+        return f.read().strip() == '1'
 
 if __name__ == "__main__":
     try:
@@ -200,4 +220,4 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exception(e)
         print("ERROR: " + str(e))
-        print("Ask @Wonder for help in our Discord in the #ai-aimbot channel ONLY: https://discord.gg/rootkitorg")  
+        print("Ask @Wonder for help in our Discord in the #ai-aimbot channel ONLY: https://discord.gg/rootkitorg")

@@ -1,6 +1,6 @@
-import pygetwindow
+from Xlib import display, X
 import time
-import bettercam
+import mss
 from typing import Union
 
 # Could be do with
@@ -8,22 +8,40 @@ from typing import Union
 # But we are writing it out for clarity for new devs
 from config import screenShotHeight, screenShotWidth
 
-def gameSelection() -> (bettercam.BetterCam, int, Union[int, None]):
+def get_all_windows():
+    d = display.Display()
+    root = d.screen().root
+    root.change_attributes(event_mask=X.FocusChangeMask)
+    windows = root.query_tree().children
+    return windows
+
+def get_window_title(window):
+    window.change_attributes(event_mask=X.FocusChangeMask)
+    window_title = window.get_wm_name()
+    return window_title
+
+def activate_window(window):
+    window.set_input_focus(X.RevertToParent, X.CurrentTime)
+    window.configure(stack_mode=X.Above)
+    window.map()
+
+def gameSelection() -> Union[tuple, None]:
     # Selecting the correct game window
     try:
-        videoGameWindows = pygetwindow.getAllWindows()
+        videoGameWindows = get_all_windows()
         print("=== All Windows ===")
         for index, window in enumerate(videoGameWindows):
             # only output the window if it has a meaningful title
-            if window.title != "":
-                print("[{}]: {}".format(index, window.title))
+            window_title = get_window_title(window)
+            if window_title:
+                print("[{}]: {}".format(index, window_title))
         # have the user select the window they want
         try:
             userInput = int(input(
                 "Please enter the number corresponding to the window you'd like to select: "))
         except ValueError:
             print("You didn't enter a valid number. Please try again.")
-            return
+            return None
         # "save" that window as the chosen window for the rest of the script
         videoGameWindow = videoGameWindows[userInput]
     except Exception as e:
@@ -35,18 +53,12 @@ def gameSelection() -> (bettercam.BetterCam, int, Union[int, None]):
     activationSuccess = False
     while (activationRetries > 0):
         try:
-            videoGameWindow.activate()
+            activate_window(videoGameWindow)
             activationSuccess = True
             break
-        except pygetwindow.PyGetWindowException as we:
-            print("Failed to activate game window: {}".format(str(we)))
-            print("Trying again... (you should switch to the game now)")
         except Exception as e:
             print("Failed to activate game window: {}".format(str(e)))
-            print("Read the relevant restrictions here: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow")
-            activationSuccess = False
-            activationRetries = 0
-            break
+            print("Trying again... (you should switch to the game now)")
         # wait a little bit before the next try
         time.sleep(3.0)
         activationRetries = activationRetries - 1
@@ -57,12 +69,12 @@ def gameSelection() -> (bettercam.BetterCam, int, Union[int, None]):
     print("Successfully activated the game window...")
 
     # Starting screenshoting engine
-    left = ((videoGameWindow.left + videoGameWindow.right) // 2) - (screenShotWidth // 2)
-    top = videoGameWindow.top + \
-        (videoGameWindow.height - screenShotHeight) // 2
+    left = ((videoGameWindow.get_geometry().x + videoGameWindow.get_geometry().width) // 2) - (screenShotWidth // 2)
+    top = videoGameWindow.get_geometry().y + \
+        (videoGameWindow.get_geometry().height - screenShotHeight) // 2
     right, bottom = left + screenShotWidth, top + screenShotHeight
 
-    region: tuple = (left, top, right, bottom)
+    region: dict = {"left": left, "top": top, "width": screenShotWidth, "height": screenShotHeight}
 
     # Calculating the center Autoaim box
     cWidth: int = screenShotWidth // 2
@@ -70,10 +82,6 @@ def gameSelection() -> (bettercam.BetterCam, int, Union[int, None]):
 
     print(region)
 
-    camera = bettercam.create(region=region, output_color="BGRA", max_buffer_len=512)
-    if camera is None:
-        print("Your Camera Failed! Ask @Wonder for help in our Discord in the #ai-aimbot channel ONLY: https://discord.gg/rootkitorg")
-        return
-    camera.start(target_fps=120, video_mode=True)
+    sct = mss.mss()
 
-    return camera, cWidth, cHeight
+    return sct, region, cWidth, cHeight

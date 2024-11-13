@@ -33,4 +33,4 @@ centerOfScreen = True
 # 1 - CPU
 # 2 - AMD
 # 3 - NVIDIA
-onnxChoice = 1
+onnxChoice = 3
